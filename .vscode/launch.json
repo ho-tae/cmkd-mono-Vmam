@@ -1,0 +1,26 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+
+
+        {
+            "name": "Python: Train",
+            "type": "python",
+            "request": "launch",
+            "program": "/cmkd/tools/test.py",
+            "args": [
+                "--cfg_file",
+                //"/cmkd/tools/cfgs/kitti_models/dymvr_sst_knn24_sa_ca_ws10.yaml"
+                //"/cmkd/tools/cfgs/kitti_models/CaDDN.yaml"
+                "/cmkd/tools/cfgs/kitti_models/caddn_vmamba.yaml",
+                "--ckpt",
+                "/cmkd/output/cmkd/tools/cfgs/kitti_models/caddn_vmamba/checkpoint_epoch_80.pth"
+                // "/cmkd/tools/cfgs/kitti_models/mamba_caddn.yaml",
+                // "--ckpt",
+                // "/cmkd/output/cmkd/tools/cfgs/kitti_models/dymvr_multi_sst_sa_ca_pre_nuscenes_ws10/default/ckpt/checkpoint_epoch_32.pth"
+            ],
+            "console": "integratedTerminal",
+            // "justMyCode": true
+        }
+    ]
+}
