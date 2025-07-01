@@ -1,5 +1,6 @@
 import math
 import torch
+import torch.nn.functional as F
 
 try:
     from kornia.geometry.conversions import (
@@ -88,4 +89,10 @@ def bin_depths(depth_map, mode, depth_min, depth_max, num_bins, target=False):
 
         # Convert to integer
         indices = indices.type(torch.int64)
+
+        # B, H, W = indices.shape
+        # gt_one_hot = torch.zeros((B, num_bins + 1, H, W), device=indices.device)
+        # gt_one_hot_value = gt_one_hot.scatter(1, indices.unsqueeze(1), 1)  # One-hot encoding
+        # return gt_one_hot_value
+
     return indices

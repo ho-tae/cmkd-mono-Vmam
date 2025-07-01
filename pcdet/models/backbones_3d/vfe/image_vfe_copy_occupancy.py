@@ -2,7 +2,6 @@ import torch
 
 from .vfe_template import VFETemplate
 from .image_vfe_modules import ffn, f2v
-from .gaussian_attention import GaussianOccupancyVFE
 
 import torch.nn as nn
 import torch.nn.functional as F
@@ -91,8 +90,6 @@ class ImageVFE(VFETemplate):
         ]
         self.build_modules()
         
-        #self.gaussian_refine = GaussianOccupancyVFE(in_channels=32)
-        
         self.voxel_size = model_cfg.VOXEL_SIZE
         self.init_dres = nn.Sequential(nn.Conv3d(32, 32, 3, 1, 1), nn.ReLU(inplace=True))
         self.dres0 = hourglassNoBN(32)
@@ -173,11 +170,6 @@ class ImageVFE(VFETemplate):
         out2 = out2 + cost0
         voxel_features = out2
 
-        # # Gaussian refinement 적용
-        # occupancy_prob_0, refined_voxels = self.gaussian_refine(voxel_features)
-        # batch_dict["occupancy_prob_0"] = occupancy_prob_0
-        # batch_dict["voxel_features"] = refined_voxels
-        
         occupancy_prob_0 = self.occupancy3D_prob_0(voxel_features)
         occupancy_prob_0 = torch.clamp(torch.sigmoid(occupancy_prob_0), 1e-5, 1 - 1e-5)
         batch_dict["occupancy_prob_0"] = occupancy_prob_0
@@ -207,11 +199,6 @@ class ImageVFE(VFETemplate):
         loss2, tb_dict2 = self.occupancy_loss(**self.forward_ret_dict)
         loss += loss2
         tb_dict.update(tb_dict2)
-        
-        # # ✅ 추가: Gaussian occupancy loss
-        # loss4, tb_dict4 = self.occupancy_loss_gaussian(**self.forward_ret_dict)
-        # loss += loss4
-        # tb_dict.update(tb_dict4)
 
         loss3, tb_dict3 = self.occupancy_loss_1213(**self.forward_ret_dict)
         loss += loss3
@@ -219,21 +206,7 @@ class ImageVFE(VFETemplate):
         
         return loss, tb_dict
         
-    def occupancy_loss_gaussian(self, occupancy_prob_0, aug_lidar_coor_map, **kwargs):
-        aug_lidar_3d = aug_lidar_coor_map.reshape(occupancy_prob_0.shape[0], -1, 3)  # [B, HW*D, 3] 
-
-        with torch.no_grad():
-            gt_label = torch.stack([self.occupancy_label_1213(p) for p in aug_lidar_3d], dim=0)  # [B, Z, Y, X]
-            target_mask = (gt_label == 1).float()
-
-        loss = self.gaussian_occupancy_loss(occupancy_prob_0, target_mask)
-        tb_dict = {"gaussian_occupancy_loss": loss.item()}
-        return loss, tb_dict
-
-    def gaussian_occupancy_loss(self, pred_prob, target_mask):
-        bce = nn.BCELoss()
-        return bce(pred_prob.squeeze(1), target_mask.float())
-    
+        
     def occupancy_loss(self, depth_maps, frustum_features_prob, **kwargs):
         def bin_ray_depths(depth_map, mode, depth_min, depth_max, num_bins, target=False):
             """

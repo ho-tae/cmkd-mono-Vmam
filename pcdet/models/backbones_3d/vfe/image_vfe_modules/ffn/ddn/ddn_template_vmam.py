@@ -2,12 +2,14 @@ from collections import OrderedDict
 from pathlib import Path
 from torch import hub
 from mmseg.apis import init_model, inference_model
+#from .binsformer_head import BinsFormerDecodeHead
+from .depth_head import DepthHead
 
 import sys
 import os
 
 # Add the directory containing VMamba to the system path
-sys.path.append('/cmkd/VMamba')
+sys.path.append('/cmkd-mono-Vmam/VMamba')
 
 # Now you can import model from VMamba/segmentation
 from segmentation import model
@@ -52,7 +54,54 @@ class DDNTemplateVMam(nn.Module):
         self.model = self.get_model(backbone_name=backbone_name)
         self.image_feat_extract_layer = image_feat_extract_layer
         self.depth_feat_extract_layer = depth_feat_extract_layer
+        
+        self.depth_head = DepthHead(in_channels=128, out_channels=151)
+        
+        # self.binsformer = BinsFormerDecodeHead(
+        #     transformer_encoder=dict( # default settings
+        #                              type='PureMSDEnTransformer',
+        #                              num_feature_levels=3,
+        #                              encoder=dict(
+        #                                  type='DetrTransformerEncoder',
+        #                                  num_layers=6,
+        #                                  transformerlayers=dict(
+        #                                      type='BaseTransformerLayer',
+        #                                      attn_cfgs=dict(
+        #                                          type='MultiScaleDeformableAttention', 
+        #                                          embed_dims=256, 
+        #                                          num_levels=3, 
+        #                                          num_points=8),
+        #                                      feedforward_channels=1024,
+        #                                      ffn_dropout=0.1,
+        #                                      operation_order=('self_attn', 'norm', 'ffn', 'norm')))),
+        #     positional_encoding=dict(
+        #         type='SinePositionalEncoding', num_feats=128, normalize=True),
+        #     transformer_decoder=dict(
+        #         type='PixelTransformerDecoder',
+        #         return_intermediate=True,
+        #         num_layers=9,
+        #         num_feature_levels=3,
+        #         hidden_dim=256,
+        #         operation='//',
+        #         transformerlayers=dict(
+        #             type='PixelTransformerDecoderLayer',
+        #             attn_cfgs=dict(
+        #                 type='MultiheadAttention',
+        #                 embed_dims=256,
+        #                 num_heads=8,
+        #                 dropout=0.0),
+        #             ffn_cfgs=dict(
+        #                 feedforward_channels=2048,
+        #                 ffn_drop=0.0),
+        #             operation_order=('cross_attn', 'norm', 'self_attn', 'norm', 'ffn', 'norm'))),
+        #     in_channels=[128, 256, 512, 1024],
+        #     channels=256,
+        #     n_bins=150,
+        #     loss_decode={'type': 'SigLoss', 'valid_mask': True, 'loss_weight': 10},
+        #     min_depth=2.0, # caddn 2.0 binsformer 0.001
+        #     max_depth=46.8,)   # cadde 46.8 binsformer 10
 
+        
     def get_model(self, backbone_name):
         """
         Get model
@@ -127,32 +176,29 @@ class DDNTemplateVMam(nn.Module):
             images: (N, 3, H_in, W_in), Input images
         Returns:
             result: dict[torch.Tensor], Depth distribution result
-                image_features: (N, C, H_out, W_out), Image features from image_feat_extract_layer
-                depth_features: (N, C, H_out, W_out), Depth features from depth_feat_extract_layer
+                features: (N, C, H_out, W_out), Image features from image_feat_extract_layer
                 logits: (N, num_classes, H_out, W_out), Classification logits
-                aux: (N, num_classes, H_out, W_out), Auxiliary classification logits
         """
         # Extract features
         result = OrderedDict()
         x = images
         
-        features = self.model.backbone(x)
+        features = self.model.backbone(x)                
         result['features'] = features[0]
-        feat_shape = result['features'].shape[-2:]
-        
-        #features = self.model.decode_head(features)
-        
-        # Prediction classification logits
-        #x = features[3]
         
         features = self.model(x)
-        # features = self.model.auxiliary_head(features)
-        # features = F.interpolate(x, size=feat_shape, mode='bilinear', align_corners=False)
         result["logits"] = features
-
+        
+        #result["logits"] = self.depth_head(result["features"])  # (N, 1, H, W)
+        
+        # pred_depths, pred_logit, pred_classes = self.binsformer(features)
+        # result["pred_depths"] = pred_depths[-1]
+        # result["pred_logit"] = pred_logit #[:, :-1, :, :]
+        # result["pred_classes"] = pred_classes
+    
         return result
 
-    def preprocess(self, images):
+    def preprocess(self, images): 
         """
         Preprocess images
         Args:

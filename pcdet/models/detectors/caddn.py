@@ -26,13 +26,18 @@ class CaDDN(Detector3DTemplate):
 
         loss_rpn, tb_dict_rpn = self.dense_head.get_loss()
         loss_depth, tb_dict_depth = self.vfe.get_loss()
-
+        #loss_bev, tb_dict_bev = self.map_to_bev_module.get_loss(tb_dict_depth['occupancy_bev_gt'])
+        #tb_dict_depth.pop("occupancy_bev_gt")
+        
         tb_dict = {
             'loss_rpn': loss_rpn.item(),
             'loss_depth': loss_depth.item(),
+#            'loss_bev' : loss_bev.item(),
             **tb_dict_rpn,
-            **tb_dict_depth
+            **tb_dict_depth,
+#            **tb_dict_bev
         }
 
-        loss = loss_rpn + loss_depth
+        loss = loss_rpn + loss_depth #+ loss_bev
+        #loss = loss_depth
         return loss, tb_dict, disp_dict

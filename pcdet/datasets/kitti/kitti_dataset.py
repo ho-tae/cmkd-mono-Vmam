@@ -3,6 +3,8 @@ import pickle
 
 import numpy as np
 from skimage import io
+from pathlib import Path
+
 
 from . import kitti_utils
 from ...ops.roiaware_pool3d import roiaware_pool3d_utils
@@ -29,8 +31,17 @@ class KittiDataset(DatasetTemplate):
         split_dir = self.root_path / 'ImageSets' / (self.split + '.txt')
         self.sample_id_list = [x.strip() for x in open(split_dir).readlines()] if split_dir.exists() else None
 
+
         self.kitti_infos = []
         self.include_kitti_data(self.mode)
+
+
+        self.POINT_CLOUD_RANGE = self.dataset_cfg.POINT_CLOUD_RANGE
+        if len(self.dataset_cfg.DATA_PROCESSOR) == 1:
+            self.VOXEL_SIZE = self.dataset_cfg.DATA_PROCESSOR[0].VOXEL_SIZE
+        else:
+            self.VOXEL_SIZE = self.dataset_cfg.DATA_PROCESSOR[1].VOXEL_SIZE
+
 
     def include_kitti_data(self, mode):
         if self.logger is not None:
@@ -104,6 +115,7 @@ class KittiDataset(DatasetTemplate):
         depth = depth.astype(np.float32)
         depth /= 256.0
         return depth
+
 
     def get_calib(self, idx):
         calib_file = self.root_split_path / 'calib' / ('%s.txt' % idx)
@@ -329,6 +341,12 @@ class KittiDataset(DatasetTemplate):
         for index, box_dict in enumerate(pred_dicts):
             frame_id = batch_dict['frame_id'][index]
 
+            # import cv2 as cv
+            # image_shape = batch_dict['image_shape'][index].cpu().numpy()
+            # depth_probs = pred_dicts[index]['depth_probs'].cpu().numpy()
+            # depth_probs = cv.resize(depth_probs, (image_shape[1], image_shape[0]))
+            # box_dict['depth_probs'] = depth_probs
+
             single_pred_dict = generate_single_sample_dict(index, box_dict)
             single_pred_dict['frame_id'] = frame_id
             annos.append(single_pred_dict)
@@ -369,7 +387,6 @@ class KittiDataset(DatasetTemplate):
         return len(self.kitti_infos)
 
     def __getitem__(self, index):
-        # index = 4
         if self._merge_all_iters_to_one_epoch:
             index = index % len(self.kitti_infos)
 
@@ -378,6 +395,7 @@ class KittiDataset(DatasetTemplate):
         sample_idx = info['point_cloud']['lidar_idx']
         img_shape = info['image']['image_shape']
         calib = self.get_calib(sample_idx)
+
         get_item_list = self.dataset_cfg.get('GET_ITEM_LIST', ['points'])
 
         input_dict = {
@@ -410,7 +428,14 @@ class KittiDataset(DatasetTemplate):
                 pts_rect = calib.lidar_to_rect(points[:, 0:3])
                 fov_flag = self.get_fov_flag(pts_rect, img_shape, calib)
                 points = points[fov_flag]
-            input_dict['points'] = points
+
+
+            '''lidar depth map'''
+            lidar_depth_path = self.root_split_path / 'lidar_depth' / ('%s.png' % sample_idx)
+            lidar_depth = io.imread(lidar_depth_path)
+            lidar_depth = lidar_depth.astype(np.float32) / 256.
+            input_dict['lidar_depth'] = lidar_depth
+
 
         if "images" in get_item_list:
             input_dict['images'] = self.get_image(sample_idx)
@@ -421,10 +446,9 @@ class KittiDataset(DatasetTemplate):
         if "calib_matricies" in get_item_list:
             input_dict["trans_lidar_to_cam"], input_dict["trans_cam_to_img"] = kitti_utils.calib_to_matricies(calib)
 
-        input_dict['calib'] = calib
         data_dict = self.prepare_data(data_dict=input_dict)
-
         data_dict['image_shape'] = img_shape
+
         return data_dict
 
 
